@@ -60,6 +60,12 @@
  * Descrição: Simula uma fila circular de peças do Tetris com enqueue, dequeue,
  *            geração automática e exibição clara.
  */
+/*
+ * Programa: Tetris Stack - Fila + Pilha de Reserva
+ * Disciplina: Estruturas de Dados em C (Aula 3 - Nível Intermediário)
+ * Descrição: Simula fila circular de peças futuras e pilha de reserva.
+ *            Jogar, reservar, usar peça reservada, com geração automática.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,157 +73,205 @@
 
 // ==================== ESTRUTURA DA PEÇA ====================
 typedef struct {
-    char nome;   // Tipo da peça: 'I', 'O', 'T', 'L'
-    int id;      // Identificador único (ordem de criação)
+    char nome;   // 'I', 'O', 'T', 'L'
+    int id;      // ID único
 } Peca;
 
-// ==================== CONFIGURAÇÕES DA FILA ====================
-#define TAMANHO_FILA 5
-Peca fila[TAMANHO_FILA];
-int frente = 0;      // Índice da frente da fila
-int tras = 0;        // Índice do final da fila
-int contador = 0;    // Quantidade de peças na fila
-int proximo_id = 0;  // Próximo ID a ser atribuído
+// ==================== CONFIGURAÇÕES ====================
+#define TAM_FILA 5
+#define TAM_PILHA 3
 
-// ==================== PROTÓTIPOS DAS FUNÇÕES ====================
+Peca fila[TAM_FILA];
+int frente = 0, tras = 0, cont_fila = 0;
+
+Peca pilha[TAM_PILHA];
+int topo = -1;  // -1 = pilha vazia
+
+int proximo_id = 0;
+
+// ==================== PROTÓTIPOS ====================
 void inicializarFila();
-void exibirFila();
+void exibirEstado();
 Peca gerarPeca();
-int estaCheia();
-int estaVazia();
-void enqueue(Peca nova);
+int filaCheia();
+int filaVazia();
+int pilhaCheia();
+int pilhaVazia();
+void enqueue(Peca p);
 Peca dequeue();
+void push(Peca p);
+Peca pop();
 void limparBuffer();
 
 // ==================== FUNÇÃO PRINCIPAL ====================
 int main() {
     int opcao;
 
-    // Inicializa o gerador de números aleatórios
     srand(time(NULL));
-
-    // Inicializa a fila com 5 peças
     inicializarFila();
 
-    printf("=== TETRIS STACK - FILA DE PECAS FUTURAS ===\n\n");
+    printf("=== TETRIS STACK - FILA + PILHA DE RESERVA ===\n\n");
 
     do {
-        exibirFila();
+        exibirEstado();
 
-        printf("\nOpcoes de acao:\n");
+        printf("\nOpcoes de Acao:\n");
         printf("1 - Jogar peca (dequeue)\n");
-        printf("2 - Inserir nova peca (enqueue)\n");
+        printf("2 - Reservar peca (fila -> pilha)\n");
+        printf("3 - Usar peca reservada (pop)\n");
         printf("0 - Sair\n");
-        printf("Escolha: ");
+        printf("Opcao: ");
         scanf("%d", &opcao);
         limparBuffer();
 
         switch (opcao) {
-            case 1:
-                if (estaVazia()) {
+            case 1: // Jogar peça
+                if (filaVazia()) {
                     printf("\n[ERRO] Fila vazia! Nao ha peca para jogar.\n");
                 } else {
                     Peca jogada = dequeue();
                     printf("\nPECA JOGADA: [%c %d]\n", jogada.nome, jogada.id);
+                    // Gera nova peça para manter fila cheia
+                    if (!filaCheia()) {
+                        Peca nova = gerarPeca();
+                        enqueue(nova);
+                        printf("NOVA PECA GERADA: [%c %d]\n", nova.nome, nova.id);
+                    }
                 }
                 break;
 
-            case 2:
-                if (estaCheia()) {
-                    printf("\n[ERRO] Fila cheia! Nao ha espaco para nova peca.\n");
+            case 2: // Reservar peça
+                if (filaVazia()) {
+                    printf("\n[ERRO] Fila vazia! Nao ha peca para reservar.\n");
+                } else if (pilhaCheia()) {
+                    printf("\n[ERRO] Pilha de reserva cheia! Libere espaco primeiro.\n");
                 } else {
-                    Peca nova = gerarPeca();
-                    enqueue(nova);
-                    printf("\nNOVA PECA ADICIONADA: [%c %d]\n", nova.nome, nova.id);
+                    Peca reservada = dequeue();
+                    push(reservada);
+                    printf("\nPECA RESERVADA: [%c %d]\n", reservada.nome, reservada.id);
+                    // Gera nova peça
+                    if (!filaCheia()) {
+                        Peca nova = gerarPeca();
+                        enqueue(nova);
+                        printf("NOVA PECA GERADA: [%c %d]\n", nova.nome, nova.id);
+                    }
+                }
+                break;
+
+            case 3: // Usar peça reservada
+                if (pilhaVazia()) {
+                    printf("\n[ERRO] Pilha de reserva vazia! Nao ha peca reservada.\n");
+                } else {
+                    Peca usada = pop();
+                    printf("\nPECA RESERVADA USADA: [%c %d]\n", usada.nome, usada.id);
                 }
                 break;
 
             case 0:
-                printf("\nJogo encerrado. Ate a proxima!\n");
+                printf("\nJogo encerrado. Obrigado por jogar!\n");
                 break;
 
             default:
-                printf("\n[ERRO] Opcao invalida! Tente novamente.\n");
+                printf("\n[ERRO] Opcao invalida!\n");
         }
     } while (opcao != 0);
 
     return 0;
 }
 
-// ==================== INICIALIZAÇÃO DA FILA ====================
+// ==================== INICIALIZAÇÃO ====================
 void inicializarFila() {
-    printf("Inicializando fila com 5 pecas...\n");
-    for (int i = 0; i < TAMANHO_FILA; i++) {
-        Peca nova = gerarPeca();
-        fila[tras] = nova;
-        tras = (tras + 1) % TAMANHO_FILA;
-        contador++;
+    printf("Inicializando fila com %d pecas...\n", TAM_FILA);
+    for (int i = 0; i < TAM_FILA; i++) {
+        Peca p = gerarPeca();
+        enqueue(p);
     }
-    printf("Fila inicializada com sucesso!\n\n");
+    printf("Fila inicializada!\n\n");
 }
 
-// ==================== EXIBIÇÃO DA FILA ====================
-void exibirFila() {
-    printf("\n=== FILA DE PECAS ===\n");
-    if (estaVazia()) {
-        printf("  [FILA VAZIA]\n");
-        return;
+// ==================== EXIBIÇÃO DO ESTADO ====================
+void exibirEstado() {
+    printf("\n=== ESTADO ATUAL ===\n");
+
+    // Fila
+    printf("Fila de pecas     : ");
+    if (filaVazia()) {
+        printf("[FILA VAZIA]\n");
+    } else {
+        int i = frente;
+        for (int c = 0; c < cont_fila; c++) {
+            printf("[%c %d] ", fila[i].nome, fila[i].id);
+            i = (i + 1) % TAM_FILA;
+        }
+        printf("\n");
     }
 
-    printf("  ");
-    int i = frente;
-    for (int count = 0; count < contador; count++) {
-        printf("[%c %d] ", fila[i].nome, fila[i].id);
-        i = (i + 1) % TAMANHO_FILA;
+    // Pilha
+    printf("Pilha de reserva  : (Topo -> Base): ");
+    if (pilhaVazia()) {
+        printf("[VAZIA]\n");
+    } else {
+        for (int i = topo; i >= 0; i--) {
+            printf("[%c %d] ", pilha[i].nome, pilha[i].id);
+        }
+        printf("\n");
     }
-    printf("\n");
 }
 
-// ==================== GERAÇÃO AUTOMÁTICA DE PEÇA ====================
+// ==================== GERAÇÃO DE PEÇA ====================
 Peca gerarPeca() {
-    Peca nova;
+    Peca p;
     int tipo = rand() % 4;
     switch (tipo) {
-        case 0: nova.nome = 'I'; break;
-        case 1: nova.nome = 'O'; break;
-        case 2: nova.nome = 'T'; break;
-        case 3: nova.nome = 'L'; break;
+        case 0: p.nome = 'I'; break;
+        case 1: p.nome = 'O'; break;
+        case 2: p.nome = 'T'; break;
+        case 3: p.nome = 'L'; break;
     }
-    nova.id = proximo_id++;
-    return nova;
+    p.id = proximo_id++;
+    return p;
 }
 
-// ==================== VERIFICAÇÕES DE ESTADO ====================
-int estaCheia() {
-    return contador == TAMANHO_FILA;
-}
+// ==================== VERIFICAÇÕES ====================
+int filaCheia()  { return cont_fila == TAM_FILA; }
+int filaVazia()  { return cont_fila == 0; }
+int pilhaCheia() { return topo == TAM_PILHA - 1; }
+int pilhaVazia() { return topo == -1; }
 
-int estaVazia() {
-    return contador == 0;
-}
-
-// ==================== OPERAÇÕES DA FILA CIRCULAR ====================
-void enqueue(Peca nova) {
-    if (estaCheia()) return;
-
-    fila[tras] = nova;
-    tras = (tras + 1) % TAMANHO_FILA;
-    contador++;
+// ==================== FILA CIRCULAR ====================
+void enqueue(Peca p) {
+    if (filaCheia()) return;
+    fila[tras] = p;
+    tras = (tras + 1) % TAM_FILA;
+    cont_fila++;
 }
 
 Peca dequeue() {
-    if (estaVazia()) {
+    if (filaVazia()) {
         Peca vazia = {' ', -1};
         return vazia;
     }
-
     Peca removida = fila[frente];
-    frente = (frente + 1) % TAMANHO_FILA;
-    contador--;
+    frente = (frente + 1) % TAM_FILA;
+    cont_fila--;
     return removida;
 }
 
-// ==================== LIMPAR BUFFER DO TECLADO ====================
+// ==================== PILHA (LIFO) ====================
+void push(Peca p) {
+    if (pilhaCheia()) return;
+    pilha[++topo] = p;
+}
+
+Peca pop() {
+    if (pilhaVazia()) {
+        Peca vazia = {' ', -1};
+        return vazia;
+    }
+    return pilha[topo--];
+}
+
+// ==================== LIMPAR BUFFER ====================
 void limparBuffer() {
     int c;
     while ((c = getchar()) != '\n' && c != EOF);
